@@ -1,0 +1,53 @@
+import 'dart:async';
+
+import 'package:grevel/gen/domain.pb.dart';
+import 'package:grevel/server/client.dart';
+import 'package:rxdart/rxdart.dart';
+
+class LevelChart {
+  final String ticker;
+  final List<double> points;
+  LevelChart(this.ticker, this.points);
+}
+
+class LevelsBloc {
+  final Client client;
+
+  Map<String, BehaviorSubject<Levels>> levelsStreams = Map();
+
+  LevelsBloc(this.client);
+
+  LevelsBloc start() {
+    levelsSub();
+    return this;
+  }
+
+  Future levelsSub() async {
+    client.stub
+        .getLevels(Empty.create())
+        .listen((pos) {
+          updateLevels(pos);
+        })
+        .asFuture()
+        .catchError((e) async {
+          await Future.delayed(Duration(seconds: 5));
+          print("error ${e}");
+          levelsSub();
+        });
+  }
+
+  void dispose() {
+    levelsStreams.values.forEach((f) => f.close());
+  }
+
+  BehaviorSubject<Levels> getLevelsForTickers(String ticker) {
+    levelsStreams.putIfAbsent(ticker, () => BehaviorSubject());
+    return levelsStreams[ticker].stream;
+  }
+
+  void updateLevels(Levels levels) {
+    levelsStreams
+        .putIfAbsent(levels.ticker, () => BehaviorSubject())
+        .add(levels);
+  }
+}
